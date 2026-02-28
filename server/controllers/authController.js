@@ -14,7 +14,8 @@ exports.registerUser = async (req, res) => {
         town,
         region,
         postcode,
-        country
+        country,
+        role // optional, defaults to 'user'
     } = req.body;
 
     // Validation: Check if all fields are provided
@@ -36,8 +37,8 @@ exports.registerUser = async (req, res) => {
         // Insert user
         const query = `
             INSERT INTO users 
-            (name, cnic, email, password, phone_number, address, town, region, postcode, country) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (name, cnic, email, password, phone_number, address, town, region, postcode, country, role) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         const values = [
@@ -50,7 +51,8 @@ exports.registerUser = async (req, res) => {
             town || null,
             region || null,
             postcode || null,
-            country || null
+            country || null,
+            role || 'user'
         ];
 
         await db.promise().execute(query, values);
@@ -87,7 +89,7 @@ exports.loginUser = async (req, res) => {
 
         // Generate Token
         const token = jwt.sign(
-            { id: user.id },
+            { id: user.id, role: user.role },
             process.env.JWT_SECRET || 'secret',
             { expiresIn: '1h' }
         );
@@ -99,7 +101,8 @@ exports.loginUser = async (req, res) => {
                 id: user.id,
                 name: user.name,
                 email: user.email,
-                cnic: user.cnic
+                cnic: user.cnic,
+                role: user.role
             }
         });
     } catch (error) {
