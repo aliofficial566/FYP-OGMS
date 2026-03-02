@@ -114,7 +114,7 @@ const Navbar = ({ cartCount, onLogout, user, navigate, onOpenAuth }) => (
                                 </li>
                                 <li><hr className="dropdown-divider opacity-50" /></li>
                                 <li>
-                                    <button className="dropdown-item rounded-3 d-flex align-items-center gap-3 py-2 text-danger" onClick={onLogout}>
+                                    <button className="dropdown-item rounded-3 d-flex align-items-center gap-3 py-2 text-danger" onClick={handleLogout}>
                                         <span className="material-symbols-outlined fs-5">logout</span>
                                         <span>Logout</span>
                                     </button>
@@ -289,8 +289,13 @@ const Dashboard = () => {
                 });
                 sessionStorage.removeItem('isFirstLogin');
             }
+
+            // If an admin somehow lands here while logged in, redirect them
+            if (parsedUser.role === 'admin') {
+                navigate('/admin/dashboard');
+            }
         }
-    }, []);
+    }, [navigate]);
 
     const handleAuthSuccess = (userData) => {
         setUser(userData);
@@ -299,6 +304,11 @@ const Dashboard = () => {
             title: 'Welcome Back!',
             message: `Glad to see you again, ${userData.name}!`
         });
+
+        // If an admin logs in, redirect them to the Admin side
+        if (userData.role === 'admin') {
+            setTimeout(() => navigate('/admin/dashboard'), 1500);
+        }
     };
 
     const handleLogout = () => {

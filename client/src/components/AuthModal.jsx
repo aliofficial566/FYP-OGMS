@@ -90,6 +90,24 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
         }
     };
 
+    const handleClear = () => {
+        setFormData({
+            email: '',
+            password: '',
+            name: '',
+            cnic: '',
+            phone_number: '',
+            country_code: '+92',
+            addressLine1: '',
+            addressLine2: '',
+            town: '',
+            region: '',
+            postcode: '',
+            country: 'Pakistan'
+        });
+        setError(null);
+    };
+
     const validateStep1 = () => {
         if (!formData.name || !formData.email || !formData.password || !formData.cnic || !formData.phone_number) {
             setError('Please fill in all personal details.');
@@ -162,6 +180,8 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
         }
     };
 
+    const RequiredAsterisk = () => <span className="text-danger ms-1">*</span>;
+
     return (
         <div
             className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
@@ -175,16 +195,37 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
             <style>{`
                 .auth-modal-card {
                     width: 100%;
-                    max-width: 440px;
+                    max-width: 550px;
                     background: #ffffff;
                     border-radius: 28px;
-                    padding: 40px;
+                    padding: 40px 48px;
                     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
                     animation: modalScaleUp 0.3s ease-out;
+                    position: relative;
                 }
                 @keyframes modalScaleUp {
                     from { opacity: 0; transform: scale(0.95); }
                     to { opacity: 1; transform: scale(1); }
+                }
+                .close-modal-btn {
+                    position: absolute;
+                    top: 24px;
+                    right: 24px;
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: #f8fafc;
+                    color: #94a3b8;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    border: none;
+                }
+                .close-modal-btn:hover {
+                    background: #fee2e2;
+                    color: #ef4444;
                 }
                 .auth-modal-title {
                     font-size: 32px;
@@ -256,7 +297,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                     text-decoration: none;
                 }
                 .auth-button-custom {
-                    width: 100%;
+                    flex-grow: 1;
                     height: 52px;
                     background: #10b981;
                     color: #ffffff;
@@ -264,7 +305,6 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                     border-radius: 12px;
                     font-size: 16px;
                     font-weight: 700;
-                    margin-top: 8px;
                     transition: all 0.2s;
                     box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
                 }
@@ -273,12 +313,24 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                     transform: translateY(-1px);
                     box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
                 }
-                .auth-button-custom:active {
-                    transform: translateY(0);
-                }
                 .auth-button-custom:disabled {
                     opacity: 0.7;
                     cursor: not-allowed;
+                }
+                .btn-clear-custom {
+                    height: 52px;
+                    padding: 0 24px;
+                    background: #f8fafc;
+                    color: #64748b;
+                    border: 1.5px solid #f1f5f9;
+                    border-radius: 12px;
+                    font-size: 15px;
+                    font-weight: 600;
+                    transition: all 0.2s;
+                }
+                .btn-clear-custom:hover {
+                    background: #f1f5f9;
+                    color: #1e293b;
                 }
                 .auth-footer-text {
                     text-align: center;
@@ -295,7 +347,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                 .step-indicator {
                     display: flex;
                     align-items: center;
-                    gap: 8px;
+                    gap: 12px;
                     margin-bottom: 24px;
                 }
                 .step-dot {
@@ -330,6 +382,10 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
             `}</style>
 
             <div className="auth-modal-card" onClick={e => e.stopPropagation()}>
+                <button className="close-modal-btn" onClick={onClose}>
+                    <span className="material-symbols-outlined">close</span>
+                </button>
+
                 {!isLogin && currentStep === 2 && (
                     <button className="back-button" onClick={() => setCurrentStep(1)}>
                         <span className="material-symbols-outlined fs-5">arrow_back</span>
@@ -371,7 +427,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                     {isLogin ? (
                         <>
                             <div className="form-group-custom">
-                                <label className="form-label-custom">Email or Username</label>
+                                <label className="form-label-custom">Email or Username<RequiredAsterisk /></label>
                                 <div className="input-wrapper-custom">
                                     <span className="material-symbols-outlined input-icon-custom">alternate_email</span>
                                     <input
@@ -388,7 +444,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
 
                             <div className="form-group-custom">
                                 <div className="d-flex justify-content-between">
-                                    <label className="form-label-custom">Password</label>
+                                    <label className="form-label-custom">Password<RequiredAsterisk /></label>
                                     <a href="#" className="forgot-password-link" onClick={e => e.preventDefault()}>Forgot password?</a>
                                 </div>
                                 <div className="input-wrapper-custom">
@@ -415,7 +471,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                         currentStep === 1 ? (
                             <>
                                 <div className="form-group-custom">
-                                    <label className="form-label-custom">Full Name</label>
+                                    <label className="form-label-custom">Full Name<RequiredAsterisk /></label>
                                     <div className="input-wrapper-custom">
                                         <span className="material-symbols-outlined input-icon-custom">person</span>
                                         <input
@@ -430,7 +486,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                                     </div>
                                 </div>
                                 <div className="form-group-custom">
-                                    <label className="form-label-custom">Email Address</label>
+                                    <label className="form-label-custom">Email Address<RequiredAsterisk /></label>
                                     <div className="input-wrapper-custom">
                                         <span className="material-symbols-outlined input-icon-custom">alternate_email</span>
                                         <input
@@ -447,7 +503,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                                 <div className="row g-3">
                                     <div className="col-md-6">
                                         <div className="form-group-custom">
-                                            <label className="form-label-custom">CNIC</label>
+                                            <label className="form-label-custom">CNIC<RequiredAsterisk /></label>
                                             <div className="input-wrapper-custom">
                                                 <span className="material-symbols-outlined input-icon-custom">badge</span>
                                                 <input
@@ -465,7 +521,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                                     </div>
                                     <div className="col-md-6">
                                         <div className="form-group-custom">
-                                            <label className="form-label-custom">Phone Number</label>
+                                            <label className="form-label-custom">Phone Number<RequiredAsterisk /></label>
                                             <div className="input-wrapper-custom">
                                                 <span className="material-symbols-outlined input-icon-custom">call</span>
                                                 <input
@@ -482,7 +538,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                                     </div>
                                 </div>
                                 <div className="form-group-custom">
-                                    <label className="form-label-custom">Password</label>
+                                    <label className="form-label-custom">Password<RequiredAsterisk /></label>
                                     <div className="input-wrapper-custom">
                                         <span className="material-symbols-outlined input-icon-custom">lock</span>
                                         <input
@@ -506,7 +562,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                         ) : (
                             <>
                                 <div className="form-group-custom">
-                                    <label className="form-label-custom">Shipping Address</label>
+                                    <label className="form-label-custom">Shipping Address<RequiredAsterisk /></label>
                                     <div className="input-wrapper-custom">
                                         <span className="material-symbols-outlined input-icon-custom">home</span>
                                         <input
@@ -521,6 +577,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                                     </div>
                                 </div>
                                 <div className="form-group-custom">
+                                    <label className="form-label-custom">Street Address Line 2</label>
                                     <div className="input-wrapper-custom">
                                         <span className="material-symbols-outlined input-icon-custom">apartment</span>
                                         <input
@@ -536,7 +593,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                                 <div className="row g-3">
                                     <div className="col-md-6">
                                         <div className="form-group-custom">
-                                            <label className="form-label-custom">Town / City</label>
+                                            <label className="form-label-custom">Town / City<RequiredAsterisk /></label>
                                             <div className="input-wrapper-custom">
                                                 <span className="material-symbols-outlined input-icon-custom">location_city</span>
                                                 <input
@@ -553,7 +610,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                                     </div>
                                     <div className="col-md-6">
                                         <div className="form-group-custom">
-                                            <label className="form-label-custom">Region / State</label>
+                                            <label className="form-label-custom">Region / State<RequiredAsterisk /></label>
                                             <div className="input-wrapper-custom">
                                                 <span className="material-symbols-outlined input-icon-custom">map</span>
                                                 <input
@@ -572,7 +629,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                                 <div className="row g-3">
                                     <div className="col-md-6">
                                         <div className="form-group-custom">
-                                            <label className="form-label-custom">Postcode</label>
+                                            <label className="form-label-custom">Postcode<RequiredAsterisk /></label>
                                             <div className="input-wrapper-custom">
                                                 <span className="material-symbols-outlined input-icon-custom">mark_as_unread</span>
                                                 <input
@@ -589,7 +646,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                                     </div>
                                     <div className="col-md-6">
                                         <div className="form-group-custom">
-                                            <label className="form-label-custom">Country</label>
+                                            <label className="form-label-custom">Country<RequiredAsterisk /></label>
                                             <div className="input-wrapper-custom">
                                                 <span className="material-symbols-outlined input-icon-custom">public</span>
                                                 <select
@@ -614,19 +671,30 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                         )
                     )}
 
-                    <button
-                        type="submit"
-                        className="auth-button-custom d-flex align-items-center justify-content-center gap-2"
-                        disabled={loading}
-                    >
-                        {loading && <span className="spinner-border spinner-border-sm"></span>}
-                        {isLogin ? 'Login' : (currentStep === 1 ? 'Next Step' : 'Create Account')}
-                        {!isLogin && !loading && (
-                            <span className="material-symbols-outlined fs-5">
-                                {currentStep === 1 ? 'arrow_forward' : 'check_circle'}
-                            </span>
+                    <div className="d-flex gap-3 mt-4">
+                        {!isLogin && (
+                            <button
+                                type="button"
+                                className="btn-clear-custom"
+                                onClick={handleClear}
+                            >
+                                Clear Form
+                            </button>
                         )}
-                    </button>
+                        <button
+                            type="submit"
+                            className="auth-button-custom d-flex align-items-center justify-content-center gap-2"
+                            disabled={loading}
+                        >
+                            {loading && <span className="spinner-border spinner-border-sm"></span>}
+                            {isLogin ? 'Login' : (currentStep === 1 ? 'Next Step' : 'Create Account')}
+                            {!isLogin && !loading && (
+                                <span className="material-symbols-outlined fs-5">
+                                    {currentStep === 1 ? 'arrow_forward' : 'check_circle'}
+                                </span>
+                            )}
+                        </button>
+                    </div>
                 </form>
 
                 <div className="auth-footer-text">
@@ -643,11 +711,10 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                     )}
                 </div>
 
-
-                <div className="auth-bottom-links">
-                    <a href="#" className="auth-bottom-link">Terms of Service</a>
-                    <a href="#" className="auth-bottom-link">Privacy Policy</a>
-                    <a href="#" className="auth-bottom-link">Contact Support</a>
+                <div className="auth-bottom-links d-flex justify-content-center gap-3 mt-4">
+                    <a href="#" className="text-secondary small text-decoration-none">Terms of Service</a>
+                    <a href="#" className="text-secondary small text-decoration-none">Privacy Policy</a>
+                    <a href="#" className="text-secondary small text-decoration-none">Contact Support</a>
                 </div>
             </div>
         </div>

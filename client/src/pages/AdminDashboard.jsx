@@ -13,7 +13,7 @@ const AdminDashboard = () => {
         const user = JSON.parse(localStorage.getItem('user'));
 
         if (!token || user?.role !== 'admin') {
-            navigate('/login');
+            navigate('/');
             return;
         }
 
@@ -33,7 +33,7 @@ const AdminDashboard = () => {
     const handleLogout = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        navigate('/login');
+        navigate('/');
     };
 
     return (
@@ -421,10 +421,6 @@ const AdminDashboard = () => {
                         </div>
                     </div>
                 </div>
-
-                <footer className="px-5 pb-5 text-center text-muted small mt-5 pt-5 border-top" style={{ borderColor: '#f1f5f9 !important' }}>
-                    © 2024 OGMS - Online Grocery Management System. All rights reserved.
-                </footer>
             </main>
         </div>
     );

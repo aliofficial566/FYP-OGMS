@@ -7,3 +7,12 @@ export const register = (data) =>
 
 export const login = (data) =>
     axios.post(`${API_URL}/login`, data);
+
+export const forgotPassword = (data) =>
+    axios.post(`${API_URL}/forgot-password`, data);
+
+export const verifyOTP = (data) =>
+    axios.post(`${API_URL}/verify-otp`, data);
+
+export const resetPassword = (data) =>
+    axios.post(`${API_URL}/reset-password`, data);

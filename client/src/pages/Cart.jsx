@@ -57,9 +57,9 @@ const Cart = () => {
                 title: 'Sign In Required',
                 message: 'Please sign in to proceed with your checkout.'
             });
-            // Redirect to login after a short delay
+            // Redirect to home where the AuthModal is available
             setTimeout(() => {
-                navigate('/login', { state: { from: '/cart' } });
+                navigate('/');
             }, 1000);
             return;
         }
@@ -193,7 +193,7 @@ const Cart = () => {
 
                             {!user && (
                                 <p className="text-center text-muted small mt-3">
-                                    You'll need to sign in to complete your order.
+                                    You'll need to sign in on the home page to complete your order.
                                 </p>
                             )}
                         </div>

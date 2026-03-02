@@ -1,10 +1,11 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Login from './pages/Login';
-import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminOrders from './pages/AdminOrders';
 import Cart from './pages/Cart';
+import NotFound from './pages/NotFound';
+import PageLayout from './components/PageLayout';
+import './styles/global.css';
 
 // Custom Protected Route Component
 const ProtectedRoute = ({ children, allowedRole }) => {
@@ -12,7 +13,9 @@ const ProtectedRoute = ({ children, allowedRole }) => {
   const user = JSON.parse(localStorage.getItem('user'));
 
   if (!token) {
-    return <Navigate to="/login" replace />;
+    // Since we don't have a /login page anymore, redirect to home.
+    // Dashboard has the AuthModal for users to sign in.
+    return <Navigate to="/" replace />;
   }
 
   if (allowedRole && user?.role !== allowedRole) {
@@ -23,52 +26,38 @@ const ProtectedRoute = ({ children, allowedRole }) => {
   return children;
 };
 
-// Redirect if already logged in
-const PublicRoute = ({ children }) => {
-  const token = localStorage.getItem('token');
-  const user = JSON.parse(localStorage.getItem('user'));
-
-  if (token) {
-    return <Navigate to={user?.role === 'admin' ? '/admin/dashboard' : '/'} replace />;
-  }
-  return children;
-};
-
 function App() {
   return (
     <Router>
-      <Routes>
-        {/* Public Routes */}
-        <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-        <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
+      <PageLayout>
+        <Routes>
+          {/* Main Public Home Page */}
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/dashboard" element={<Navigate to="/" replace />} />
+          <Route path="/cart" element={<Cart />} />
 
-        {/* Main Public Home Page (Previously Dashboard) */}
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/dashboard" element={<Navigate to="/" replace />} />
-        <Route path="/cart" element={<Cart />} />
+          {/* Protected Admin Routes */}
+          <Route
+            path="/admin/dashboard"
+            element={
+              <ProtectedRoute allowedRole="admin">
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/orders"
+            element={
+              <ProtectedRoute allowedRole="admin">
+                <AdminOrders />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Protected Admin Routes */}
-        <Route
-          path="/admin/dashboard"
-          element={
-            <ProtectedRoute allowedRole="admin">
-              <AdminDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/orders"
-          element={
-            <ProtectedRoute allowedRole="admin">
-              <AdminOrders />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Default Redirects */}
-        {/* Catch-all route for any unhandled paths */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          {/* 404 Route */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </PageLayout>
     </Router>
   );
 }
