@@ -1,16 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { login, register } from '../services/auth';
+import { useNavigate, Link } from 'react-router-dom';
+import { login, register, forgotPassword, verifyOTP, resetPassword } from '../services/auth';
 import Toast from './Toast';
 
-const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
+const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login', message = null }) => {
     const navigate = useNavigate();
     const [isLogin, setIsLogin] = useState(initialView === 'login');
     const [currentStep, setCurrentStep] = useState(1); // 1: Personal, 2: Shipping
+    const [isForgotPassword, setIsForgotPassword] = useState(false);
+    const [forgotStep, setForgotStep] = useState(1); // 1: Email, 2: OTP, 3: New Password
+    const [otp, setOtp] = useState('');
+    const [newPassword, setNewPassword] = useState('');
 
     useEffect(() => {
         setIsLogin(initialView === 'login');
         setCurrentStep(1);
+        setIsForgotPassword(false);
+        setForgotStep(1);
+        setOtp('');
+        setNewPassword('');
         setError(null);
         setSuccessMessage(null);
     }, [initialView, isOpen]);
@@ -180,6 +188,53 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
         }
     };
 
+    const handleForgotEmailSubmit = async (e) => {
+        e.preventDefault();
+        setError(null);
+        setLoading(true);
+        try {
+            await forgotPassword({ email: formData.email });
+            setForgotStep(2);
+            setSuccessMessage('Email found. Please enter the OTP.');
+        } catch (err) {
+            setError(err.response?.data?.message || 'Email not found.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleVerifyOtpSubmit = async (e) => {
+        e.preventDefault();
+        setError(null);
+        setLoading(true);
+        try {
+            await verifyOTP({ email: formData.email, otp });
+            setForgotStep(3);
+            setSuccessMessage('OTP verified. Please enter your new password.');
+        } catch (err) {
+            setError(err.response?.data?.message || 'Invalid OTP.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleResetPasswordSubmit = async (e) => {
+        e.preventDefault();
+        setError(null);
+        setLoading(true);
+        try {
+            await resetPassword({ email: formData.email, otp, password: newPassword });
+            setSuccessMessage('Password reset successfully! You can now log in.');
+            setIsForgotPassword(false);
+            setIsLogin(true);
+            setFormData(prev => ({ ...prev, password: '' }));
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to reset password.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const RequiredAsterisk = () => <span className="text-danger ms-1">*</span>;
 
     return (
@@ -187,18 +242,17 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
             className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
             style={{
                 zIndex: 1050,
-                backgroundColor: 'rgba(0, 0, 0, 0.4)',
-                backdropFilter: 'blur(4px)'
+                backgroundColor: 'rgba(0, 0, 0, 0.75)'
             }}
             onClick={handleBackdropClick}
         >
             <style>{`
                 .auth-modal-card {
                     width: 100%;
-                    max-width: 550px;
+                    max-width: 620px;
                     background: #ffffff;
                     border-radius: 28px;
-                    padding: 40px 48px;
+                    padding: 40px;
                     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
                     animation: modalScaleUp 0.3s ease-out;
                     position: relative;
@@ -267,7 +321,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                     background: #f8fafc;
                     border: 1.5px solid #f1f5f9;
                     border-radius: 12px;
-                    padding: 0 48px;
+                    padding: 0 16px 0 48px;
                     font-size: 15px;
                     color: #1e293b;
                     transition: all 0.2s;
@@ -402,6 +456,13 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                             : 'Tell us where to send your orders. You can update this later in settings.')}
                 </p>
 
+                {message && !error && !successMessage && (
+                    <div className="alert alert-warning border-0 rounded-3 small py-3 d-flex align-items-center gap-3 mb-4" style={{ backgroundColor: '#FFFBEB', color: '#92400E', borderLeft: '4px solid #F59E0B' }}>
+                        <span className="material-symbols-outlined fs-4" style={{ color: '#F59E0B' }}>info</span>
+                        <div className="fw-semibold">{message}</div>
+                    </div>
+                )}
+
                 {!isLogin && (
                     <div className="step-indicator">
                         <div className={`step-dot ${currentStep === 1 ? 'active' : ''}`}></div>
@@ -423,8 +484,66 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                     </div>
                 )}
 
-                <form onSubmit={isLogin || currentStep === 2 ? handleSubmit : handleNext}>
-                    {isLogin ? (
+                <form onSubmit={isForgotPassword ? (forgotStep === 1 ? handleForgotEmailSubmit : forgotStep === 2 ? handleVerifyOtpSubmit : handleResetPasswordSubmit) : (isLogin || currentStep === 2 ? handleSubmit : handleNext)}>
+                    {isForgotPassword ? (
+                        forgotStep === 1 ? (
+                            <div className="form-group-custom">
+                                <label className="form-label-custom">Email Address<RequiredAsterisk /></label>
+                                <div className="input-wrapper-custom">
+                                    <span className="material-symbols-outlined input-icon-custom">alternate_email</span>
+                                    <input
+                                        type="email"
+                                        name="email"
+                                        className="input-custom"
+                                        placeholder="yourname@example.com"
+                                        value={formData.email}
+                                        onChange={handleChange}
+                                        required
+                                    />
+                                </div>
+                            </div>
+                        ) : forgotStep === 2 ? (
+                            <div className="form-group-custom">
+                                <label className="form-label-custom">Enter OTP<RequiredAsterisk /></label>
+                                <div className="alert alert-info border-0 rounded-3 small py-2 d-flex align-items-center gap-2 mb-3">
+                                    <span className="material-symbols-outlined fs-5">info</span>
+                                    <span>Use the static OTP code <strong>6219</strong> to reset your password.</span>
+                                </div>
+                                <div className="input-wrapper-custom">
+                                    <span className="material-symbols-outlined input-icon-custom">key</span>
+                                    <input
+                                        type="text"
+                                        className="input-custom"
+                                        placeholder="Enter 4-digit OTP"
+                                        value={otp}
+                                        onChange={e => setOtp(e.target.value)}
+                                        required
+                                    />
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="form-group-custom">
+                                <label className="form-label-custom">New Password<RequiredAsterisk /></label>
+                                <div className="input-wrapper-custom">
+                                    <span className="material-symbols-outlined input-icon-custom">lock</span>
+                                    <input
+                                        type={showPassword ? "text" : "password"}
+                                        className="input-custom"
+                                        placeholder="••••••••"
+                                        value={newPassword}
+                                        onChange={e => setNewPassword(e.target.value)}
+                                        required
+                                    />
+                                    <span
+                                        className="material-symbols-outlined password-toggle-custom"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                    >
+                                        {showPassword ? 'visibility_off' : 'visibility'}
+                                    </span>
+                                </div>
+                            </div>
+                        )
+                    ) : isLogin ? (
                         <>
                             <div className="form-group-custom">
                                 <label className="form-label-custom">Email or Username<RequiredAsterisk /></label>
@@ -445,7 +564,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                             <div className="form-group-custom">
                                 <div className="d-flex justify-content-between">
                                     <label className="form-label-custom">Password<RequiredAsterisk /></label>
-                                    <a href="#" className="forgot-password-link" onClick={e => e.preventDefault()}>Forgot password?</a>
+                                    <a href="#" className="forgot-password-link" onClick={e => { e.preventDefault(); setIsForgotPassword(true); setForgotStep(1); setError(null); setSuccessMessage(null); }}>Forgot password?</a>
                                 </div>
                                 <div className="input-wrapper-custom">
                                     <span className="material-symbols-outlined input-icon-custom">lock</span>
@@ -509,12 +628,11 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                                                 <input
                                                     type="text"
                                                     name="cnic"
-                                                    className="input-custom ps-5"
+                                                    className="input-custom"
                                                     placeholder="XXXXX-XXXXXXX-X"
                                                     value={formData.cnic}
                                                     onChange={handleChange}
                                                     required
-                                                    style={{ paddingLeft: '48px' }}
                                                 />
                                             </div>
                                         </div>
@@ -556,6 +674,25 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                                         >
                                             {showPassword ? 'visibility_off' : 'visibility'}
                                         </span>
+                                    </div>
+                                    <div className="password-requirements mt-2 px-1">
+                                        <div className="row g-2">
+                                            {[
+                                                { label: '8+ Characters', met: formData.password.length >= 8 },
+                                                { label: 'One Number', met: /\d/.test(formData.password) },
+                                                { label: 'One Special', met: /[^A-Za-z0-9]/.test(formData.password) },
+                                                { label: 'One Uppercase', met: /[A-Z]/.test(formData.password) }
+                                            ].map((req, i) => (
+                                                <div key={i} className="col-6">
+                                                    <div className={`d-flex align-items-center gap-2 small transition-all ${req.met ? 'text-success' : 'text-muted'}`}>
+                                                        <span className="material-symbols-outlined" style={{ fontSize: '14px', fontVariationSettings: "'FILL' 1" }}>
+                                                            {req.met ? 'check_circle' : 'circle'}
+                                                        </span>
+                                                        <span style={{ fontSize: '11px', fontWeight: req.met ? '700' : '500' }}>{req.label}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
                             </>
@@ -678,7 +815,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                                 className="btn-clear-custom"
                                 onClick={handleClear}
                             >
-                                Clear Form
+                                Reset
                             </button>
                         )}
                         <button
@@ -687,10 +824,10 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                             disabled={loading}
                         >
                             {loading && <span className="spinner-border spinner-border-sm"></span>}
-                            {isLogin ? 'Login' : (currentStep === 1 ? 'Next Step' : 'Create Account')}
-                            {!isLogin && !loading && (
+                            {isForgotPassword ? (forgotStep === 1 ? 'Verify Email' : forgotStep === 2 ? 'Verify OTP' : 'Reset Password') : (isLogin ? 'Login' : (currentStep === 1 ? 'Next Step' : 'Create Account'))}
+                            {(!isLogin || isForgotPassword) && !loading && (
                                 <span className="material-symbols-outlined fs-5">
-                                    {currentStep === 1 ? 'arrow_forward' : 'check_circle'}
+                                    {isForgotPassword ? 'arrow_forward' : (currentStep === 1 ? 'arrow_forward' : 'check_circle')}
                                 </span>
                             )}
                         </button>
@@ -698,7 +835,12 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                 </form>
 
                 <div className="auth-footer-text">
-                    {isLogin ? (
+                    {isForgotPassword ? (
+                        <>
+                            Remembered your password?
+                            <a href="#" className="register-link" onClick={(e) => { e.preventDefault(); setIsForgotPassword(false); setIsLogin(true); setSuccessMessage(null); setError(null); }}>Login here</a>
+                        </>
+                    ) : isLogin ? (
                         <>
                             Don't have an account?
                             <a href="#" className="register-link" onClick={(e) => { e.preventDefault(); setIsLogin(false); setCurrentStep(1); setSuccessMessage(null); setError(null); }}>Register now</a>
@@ -712,9 +854,9 @@ const AuthModal = ({ isOpen, onClose, onSuccess, initialView = 'login' }) => {
                 </div>
 
                 <div className="auth-bottom-links d-flex justify-content-center gap-3 mt-4">
-                    <a href="#" className="text-secondary small text-decoration-none">Terms of Service</a>
-                    <a href="#" className="text-secondary small text-decoration-none">Privacy Policy</a>
-                    <a href="#" className="text-secondary small text-decoration-none">Contact Support</a>
+                    <Link to="/terms-and-conditions" className="text-secondary small text-decoration-none" onClick={onClose}>Terms of Service</Link>
+                    <Link to="/privacy-policy" className="text-secondary small text-decoration-none" onClick={onClose}>Privacy Policy</Link>
+                    <a href="/contact-us" className="text-secondary small text-decoration-none" onClick={(e) => { e.preventDefault(); onClose(); navigate('/contact-us'); }}>Contact Us</a>
                 </div>
             </div>
         </div>

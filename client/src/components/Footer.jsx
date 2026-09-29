@@ -1,4 +1,4 @@
-import React from 'react';
+import { Link } from 'react-router-dom';
 import { Logo } from './Branding';
 
 const Footer = () => {
@@ -36,10 +36,10 @@ const Footer = () => {
                         <div className="col-lg-3 col-md-6 footer-section">
                             <h5 className="footer-heading">Quick Links</h5>
                             <ul className="footer-links">
-                                <li><a href="#">My Account</a></li>
-                                <li><a href="#">Contact Us</a></li>
-                                <li><a href="#">About Us</a></li>
-                                <li><a href="#">FAQs</a></li>
+                                <li><Link to={localStorage.getItem('user') ? (JSON.parse(localStorage.getItem('user')).role === 'admin' ? '/admin/dashboard' : '/dashboard') : '/?loginRequired=true'}>My Account</Link></li>
+                                <li><Link to="/contact-us">Contact Us</Link></li>
+                                <li><Link to="/about-us">About Us</Link></li>
+                                <li><Link to="/faqs">FAQs</Link></li>
                             </ul>
                         </div>
 
@@ -47,9 +47,9 @@ const Footer = () => {
                         <div className="col-lg-3 col-md-6 footer-section">
                             <h5 className="footer-heading">Policy</h5>
                             <ul className="footer-links">
-                                <li><a href="#">Privacy Policy</a></li>
-                                <li><a href="#">Terms & Conditions</a></li>
-                                <li><a href="#">Return Policy</a></li>
+                                <li><Link to="/privacy-policy">Privacy Policy</Link></li>
+                                <li><Link to="/terms-and-conditions">Terms & Conditions</Link></li>
+                                <li><Link to="/return-refund">Return Policy</Link></li>
                             </ul>
                         </div>
 
@@ -63,11 +63,11 @@ const Footer = () => {
                                 </div>
                                 <div className="contact-item">
                                     <span className="material-symbols-outlined fs-5">mail</span>
-                                    <a href="mailto:info@ogms.om">info@ogms.om</a>
+                                    <a href="mailto:info@ogms.com">info@ogms.com</a>
                                 </div>
                                 <div className="contact-item">
                                     <span className="material-symbols-outlined fs-5">call</span>
-                                    <a href="tel:03000000000">03000000000</a>
+                                    <a href="tel:+9230962*****">+92 309 62*****</a>
                                 </div>
                             </div>
                         </div>
@@ -86,9 +86,9 @@ const Footer = () => {
 
             <style>{`
                 .footer-container {
-                    background-color: #ffffff;
-                    margin-top: 80px;
-                    border-top: 1px solid #f1f5f9;
+                    background-color: #ECFDF5;
+                    margin-top: 0;
+                    border-top: 1px solid rgba(6, 78, 59, 0.05);
                 }
                 .footer-content {
                     padding-top: 60px;

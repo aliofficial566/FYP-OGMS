@@ -1,15 +1,58 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import axios from 'axios';
+import { Line } from 'react-chartjs-2';
+import {
+    Chart as ChartJS,
+    CategoryScale,
+    LinearScale,
+    PointElement,
+    LineElement,
+    Title,
+    Tooltip,
+    Legend,
+    Filler
+} from 'chart.js';
 import Toast from '../components/Toast';
 import AdminHeader from '../components/AdminHeader';
+import AdminSidebar from '../components/AdminSidebar';
+
+ChartJS.register(
+    CategoryScale,
+    LinearScale,
+    PointElement,
+    LineElement,
+    Title,
+    Tooltip,
+    Legend,
+    Filler
+);
 
 const AdminDashboard = () => {
     const navigate = useNavigate();
     const [admin, setAdmin] = useState(null);
     const [toast, setToast] = useState(null);
+    const [stats, setStats] = useState({
+        totalUsers: 0,
+        totalOrders: 0,
+        totalSales: 0,
+        totalProducts: 0,
+        pendingOrders: 0,
+    });
+    const [salesPattern, setSalesPattern] = useState('7days');
+    const [customStartDate, setCustomStartDate] = useState('');
+    const [customEndDate, setCustomEndDate] = useState('');
+    const [salesTrend, setSalesTrend] = useState([]);
+    const [inventoryHealth, setInventoryHealth] = useState({
+        inStock: 0,
+        lowStock: 0,
+        outOfStock: 0
+    });
+    const [recentOrders, setRecentOrders] = useState([]);
+
+    const token = localStorage.getItem('token');
 
     useEffect(() => {
-        const token = localStorage.getItem('token');
         const user = JSON.parse(localStorage.getItem('user'));
 
         if (!token || user?.role !== 'admin') {
@@ -19,16 +62,138 @@ const AdminDashboard = () => {
 
         setAdmin(user);
 
-        // Show welcome toast only on first login
-        if (sessionStorage.getItem('isFirstLogin') === 'true') {
-            setToast({
-                type: 'success',
-                title: 'Admin Access',
-                message: `Welcome to the Admin Panel, ${user.name}!`
-            });
-            sessionStorage.removeItem('isFirstLogin');
+        const fetchDashboardData = async () => {
+            try {
+                const config = { headers: { Authorization: `Bearer ${token}` } };
+                const [summaryRes, ordersRes] = await Promise.all([
+                    axios.get('http://localhost:5000/api/reports/dashboard-summary', config),
+                    axios.get('http://localhost:5000/api/orders', config)
+                ]);
+
+                const { stats: dbStats, inventory: dbInventory } = summaryRes.data;
+
+                setStats({
+                    totalUsers: dbStats.total_users || 0,
+                    totalOrders: dbStats.total_orders || 0,
+                    totalSales: dbStats.total_revenue || 0,
+                    totalProducts: dbStats.total_products || 0,
+                    pendingOrders: dbStats.pending_orders || 0
+                });
+
+                const totalP = dbInventory.total_count || 1;
+                setInventoryHealth({
+                    inStock: Math.round((dbInventory.in_stock / totalP) * 100),
+                    lowStock: Math.round((dbInventory.low_stock / totalP) * 100),
+                    outOfStock: Math.round((dbInventory.out_of_stock / totalP) * 100)
+                });
+
+                setRecentOrders(ordersRes.data.data ? ordersRes.data.data.slice(0, 5) : []);
+            } catch (err) {
+                console.error('Error fetching dashboard data:', err);
+            }
+        };
+
+        fetchDashboardData();
+    }, [navigate, token]);
+
+    useEffect(() => {
+        if (!token) return;
+        const fetchSalesTrend = async () => {
+            try {
+                const config = { headers: { Authorization: `Bearer ${token}` } };
+                let url = `http://localhost:5000/api/reports/sales-trend?range=${salesPattern}`;
+                if (salesPattern === 'custom' && customStartDate && customEndDate) {
+                    url += `&start_date=${customStartDate}&end_date=${customEndDate}`;
+                }
+                const trendRes = await axios.get(url, config);
+                setSalesTrend(trendRes.data || []);
+            } catch (error) {
+                console.error("Error fetching sales trend:", error);
+            }
+        };
+        
+        if (salesPattern !== 'custom' || (customStartDate && customEndDate)) {
+            fetchSalesTrend();
         }
-    }, [navigate]);
+    }, [salesPattern, customStartDate, customEndDate, token]);
+
+    const getStatusStyle = (status) => {
+        switch (status) {
+            case 'Delivered': return { bg: '#f0fdf4', color: '#16a34a' };
+            case 'Shipped': return { bg: '#eff6ff', color: '#2563eb' };
+            case 'Processing': return { bg: '#fff7ed', color: '#ea580c' };
+            case 'Cancelled': return { bg: '#fef2f2', color: '#dc2626' };
+            default: return { bg: '#f8fafc', color: '#64748b' };
+        }
+    };
+
+    // Process Trend Data for Chart.js
+    const processedTrendData = useMemo(() => {
+        if (!salesTrend) return [];
+        const now = new Date();
+        let labels = [];
+        let dataMap = {};
+
+        salesTrend.forEach(item => {
+            dataMap[item.date] = item.total_revenue;
+        });
+
+        if (salesPattern === '7days' || salesPattern === '30days') {
+            const days = salesPattern === '7days' ? 7 : 30;
+            for (let i = days - 1; i >= 0; i--) {
+                const d = new Date();
+                d.setDate(now.getDate() - i);
+                labels.push(d.toISOString().split('T')[0]);
+            }
+        } else if (salesPattern === 'month') {
+            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            for (let i = 1; i <= daysInMonth; i++) {
+                const d = new Date(now.getFullYear(), now.getMonth(), i);
+                labels.push(d.toISOString().split('T')[0]);
+            }
+        } else if (salesPattern === 'year') {
+            for (let i = 0; i < 12; i++) {
+                labels.push(`${now.getFullYear()}-${String(i + 1).padStart(2, '0')}`);
+            }
+        } else if (salesPattern === 'custom' && customStartDate && customEndDate) {
+            const start = new Date(customStartDate);
+            const end = new Date(customEndDate);
+            let current = new Date(start);
+            while (current <= end) {
+                labels.push(current.toISOString().split('T')[0]);
+                current.setDate(current.getDate() + 1);
+                if (labels.length > 366) break;
+            }
+        }
+
+        return labels.map(label => ({
+            date: label,
+            revenue: dataMap[label] || 0
+        }));
+    }, [salesTrend, salesPattern, customStartDate, customEndDate]);
+
+    const chartData = {
+        labels: processedTrendData.map(d => d.date),
+        datasets: [{
+            label: 'Revenue',
+            data: processedTrendData.map(d => d.revenue),
+            fill: true,
+            borderColor: '#10b981',
+            backgroundColor: (context) => {
+                const ctx = context.chart.ctx;
+                const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+                gradient.addColorStop(0, 'rgba(16, 185, 129, 0.2)');
+                gradient.addColorStop(1, 'rgba(16, 185, 129, 0)');
+                return gradient;
+            },
+            tension: 0.4,
+            pointBackgroundColor: '#10b981',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointRadius: salesPattern === '7days' ? 4 : 1,
+            borderWidth: 3
+        }]
+    };
 
     const handleLogout = () => {
         localStorage.removeItem('token');
@@ -37,385 +202,242 @@ const AdminDashboard = () => {
     };
 
     return (
-        <div className="admin-dashboard-wrapper bg-light vh-100 d-flex overflow-hidden">
-            <style>{`
-                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-                
-                :root {
-                    --admin-primary: #10B981;
-                    --admin-bg-light: #f8fafc;
-                    --admin-sidebar-w: 260px;
-                    --font-admin: 'Inter', sans-serif;
-                }
-
-                .admin-dashboard-wrapper {
-                    font-family: var(--font-admin);
-                    background-color: var(--admin-bg-light) !important;
-                    height: 100vh;
-                }
-
-                .sidebar {
-                    width: var(--admin-sidebar-w);
-                    flex-shrink: 0;
-                    background: #fff;
-                    border-right: 1px solid rgba(0, 0, 0, 0.05);
-                    display: flex;
-                    flex-direction: column;
-                    height: 100vh;
-                    z-index: 100;
-                }
-
-                .nav-link-admin {
-                    display: flex;
-                    align-items: center;
-                    gap: 12px;
-                    padding: 12px 20px;
-                    border-radius: 12px;
-                    color: #64748b;
-                    text-decoration: none;
-                    font-size: 0.875rem;
-                    font-weight: 600;
-                    margin: 4px 16px;
-                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-                }
-
-                .nav-link-admin:hover {
-                    background: rgba(16, 185, 129, 0.04);
-                    color: var(--admin-primary);
-                }
-
-                .nav-link-admin.active {
-                    background: #f0fdf4;
-                    color: var(--admin-primary);
-                }
-
-                .admin-header {
-                    height: 72px;
-                    background: rgba(255, 255, 255, 0.8);
-                    backdrop-filter: blur(8px);
-                    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-                    padding: 0 40px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                    position: sticky;
-                    top: 0;
-                    z-index: 90;
-                }
-
-
-                .dashboard-title {
-                    font-size: 2.25rem;
-                    font-weight: 800;
-                    letter-spacing: -0.04em;
-                    color: #0f172a;
-                }
-
-                .stat-card {
-                    background: #fff;
-                    border: 1px solid rgba(0, 0, 0, 0.03);
-                    border-radius: 24px;
-                    padding: 32px;
-                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
-                    transition: transform 0.2s;
-                }
-
-                .stat-card:hover {
-                    transform: translateY(-2px);
-                }
-
-                .stat-value {
-                    font-size: 2.5rem;
-                    font-weight: 800;
-                    letter-spacing: -0.05em;
-                    color: #0f172a;
-                    margin-top: 8px;
-                }
-
-                .stat-label {
-                    font-size: 0.75rem;
-                    font-weight: 700;
-                    text-transform: uppercase;
-                    letter-spacing: 0.08em;
-                    color: #64748b;
-                }
-
-                .trend-card, .health-card {
-                    background: #fff;
-                    border: 1px solid rgba(0, 0, 0, 0.03);
-                    border-radius: 24px;
-                    padding: 40px;
-                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
-                }
-
-                .admin-table th {
-                    font-size: 11px;
-                    font-weight: 700;
-                    text-transform: uppercase;
-                    letter-spacing: 0.05em;
-                    color: #94a3b8;
-                    background: #f8fafc;
-                    padding: 20px 32px;
-                    border: none;
-                }
-
-                .admin-table td {
-                    padding: 20px 32px;
-                    font-weight: 500;
-                    color: #334155;
-                    border-bottom: 1px solid #f1f5f9;
-                }
-
-                .badge-pill-custom {
-                    padding: 6px 14px;
-                    border-radius: 100px;
-                    font-size: 11px;
-                    font-weight: 700;
-                }
-            `}</style>
-
-            {/* Notification Toast */}
-            {toast && (
-                <Toast
-                    type={toast.type}
-                    title={toast.title}
-                    message={toast.message}
-                    onClose={() => setToast(null)}
-                />
-            )}
-
-            {/* Sidebar */}
-            <aside className="sidebar">
-                <div className="p-4 mb-3 d-flex align-items-center gap-3">
-                    <div className="rounded-3 d-flex align-items-center justify-content-center" style={{ width: 44, height: 44, background: 'var(--admin-primary)', color: '#fff' }}>
-                        <span className="material-symbols-outlined">inventory_2</span>
-                    </div>
-                    <div>
-                        <h6 className="fw-bold mb-0" style={{ fontSize: '1rem', color: '#0f172a' }}>OGMS Admin</h6>
-                        <small className="text-success fw-bold" style={{ fontSize: '11px', color: 'var(--admin-primary) !important' }}>SYSTEM CONSOLE</small>
-                    </div>
-                </div>
-
-                <nav className="flex-grow-1">
-                    <Link to="/admin/dashboard" className="nav-link-admin active">
-                        <span className="material-symbols-outlined">dashboard</span>
-                        <span>Dashboard</span>
-                    </Link>
-                    <a href="#" className="nav-link-admin">
-                        <span className="material-symbols-outlined">package_2</span>
-                        <span>Manage Products</span>
-                    </a>
-                    <Link to="/admin/orders" className="nav-link-admin">
-                        <span className="material-symbols-outlined">shopping_cart</span>
-                        <span>Orders</span>
-                    </Link>
-                    <a href="#" className="nav-link-admin">
-                        <span className="material-symbols-outlined">bar_chart_4_bars</span>
-                        <span>Reports</span>
-                    </a>
-                    <a href="#" className="nav-link-admin">
-                        <span className="material-symbols-outlined">menu_book</span>
-                        <span>Catalogues</span>
-                    </a>
-                    <a href="#" className="nav-link-admin">
-                        <span className="material-symbols-outlined">group</span>
-                        <span>Users</span>
-                    </a>
-                </nav>
-
-                <div className="p-4 border-top mt-auto">
-                    <div className="nav-link-admin m-0 px-2" role="button">
-                        <div className="rounded-circle d-flex align-items-center justify-content-center" style={{ width: 36, height: 36, background: '#f8fafc' }}>
-                            <span className="material-symbols-outlined text-secondary" style={{ fontSize: 20 }}>settings</span>
-                        </div>
-                        <span className="fw-semibold">Settings</span>
-                    </div>
-                    <div className="nav-link-admin m-0 px-2 mt-2 text-danger" role="button" onClick={handleLogout}>
-                        <span className="material-symbols-outlined">logout</span>
-                        <span className="fw-semibold">Logout</span>
-                    </div>
-                </div>
-            </aside>
-
-            {/* Main Content */}
-            <main className="flex-grow-1 overflow-auto">
+        <div className="admin-dashboard-container">
+            {toast && <Toast type={toast.type} title={toast.title} message={toast.message} onClose={() => setToast(null)} />}
+            <AdminSidebar />
+            <main className="admin-main-content">
                 <AdminHeader admin={admin} onLogout={handleLogout} />
-
                 <div className="p-5">
-                    <div className="mb-5">
-                        <h2 className="dashboard-title mb-1">Dashboard Overview</h2>
-                        <p className="text-muted fw-semibold fs-6">Welcome back, check your store's latest activity.</p>
+                    <div className="mb-5 animate-fade">
+                        <h2 className="fw-semibold text-dark mb-1" style={{ fontSize: '2.5rem', letterSpacing: '-0.05em' }}>Dashboard Overview</h2>
+                        <p className="text-muted fw-semibold">Real-time metrics and operational insights for your store.</p>
                     </div>
 
-                    {/* Stats Grid */}
                     <div className="row row-cols-1 row-cols-md-3 row-cols-xl-5 g-4 mb-5">
-                        <div className="col">
+                        <div className="col animate-fade" style={{ animationDelay: '0.1s' }}>
                             <div className="stat-card">
-                                <div className="d-flex justify-content-between align-items-start">
-                                    <div className="p-3 rounded-4" style={{ background: '#f8fafc', color: '#64748b' }}>
-                                        <span className="material-symbols-outlined d-block fs-4">group</span>
+                                <div className="d-flex justify-content-between align-items-start mb-4">
+                                    <div className="rounded-circle p-3 d-flex align-items-center justify-content-center" style={{ background: '#f8fafc', color: '#64748b' }}>
+                                        <span className="material-symbols-outlined">group</span>
                                     </div>
-                                    <span className="badge-pill-custom" style={{ background: '#f0fdf4', color: '#10b981' }}>+4.2%</span>
+                                    <span className="admin-badge admin-badge-success">Active</span>
                                 </div>
-                                <h3 className="stat-value">2,850</h3>
-                                <p className="stat-label mb-0">Total Users</p>
+                                <div className="stat-label uppercase small fw-bold text-muted">Total Users</div>
+                                <div className="stat-value">{stats.totalUsers}</div>
                             </div>
                         </div>
-                        <div className="col">
+                        <div className="col animate-fade" style={{ animationDelay: '0.2s' }}>
                             <div className="stat-card">
-                                <div className="d-flex justify-content-between align-items-start">
-                                    <div className="p-3 rounded-4" style={{ background: '#eff6ff', color: '#3b82f6' }}>
-                                        <span className="material-symbols-outlined d-block fs-4">shopping_basket</span>
+                                <div className="d-flex justify-content-between align-items-start mb-4">
+                                    <div className="rounded-circle p-3 d-flex align-items-center justify-content-center" style={{ background: '#eff6ff', color: '#3b82f6' }}>
+                                        <span className="material-symbols-outlined">shopping_basket</span>
                                     </div>
-                                    <span className="badge-pill-custom" style={{ background: '#f0fdf4', color: '#10b981' }}>+12.5%</span>
+                                    <span className="admin-badge admin-badge-success">Total</span>
                                 </div>
-                                <h3 className="stat-value">1,284</h3>
-                                <p className="stat-label mb-0">Total Orders</p>
+                                <div className="stat-label uppercase small fw-bold text-muted">Total Orders</div>
+                                <div className="stat-value">{stats.totalOrders}</div>
                             </div>
                         </div>
-                        <div className="col">
+                        <div className="col animate-fade" style={{ animationDelay: '0.3s' }}>
                             <div className="stat-card">
-                                <div className="d-flex justify-content-between align-items-start">
-                                    <div className="p-3 rounded-4" style={{ background: '#f0fdf4', color: '#10b981' }}>
-                                        <span className="material-symbols-outlined d-block fs-4">payments</span>
+                                <div className="d-flex justify-content-between align-items-start mb-4">
+                                    <div className="rounded-circle p-3 d-flex align-items-center justify-content-center" style={{ background: '#f0fdf4', color: '#10b981' }}>
+                                        <span className="material-symbols-outlined">payments</span>
                                     </div>
-                                    <span className="badge-pill-custom" style={{ background: '#f0fdf4', color: '#10b981' }}>+8.2%</span>
+                                    <span className="admin-badge admin-badge-success">Revenue</span>
                                 </div>
-                                <h3 className="stat-value">$45,230.00</h3>
-                                <p className="stat-label mb-0">Total Sales</p>
+                                <div className="stat-label uppercase small fw-bold text-muted">Total Sales</div>
+                                <div className="stat-value">Rs. {Number(stats.totalSales).toLocaleString()}</div>
                             </div>
                         </div>
-                        <div className="col">
+                        <div className="col animate-fade" style={{ animationDelay: '0.4s' }}>
                             <div className="stat-card">
-                                <div className="d-flex justify-content-between align-items-start">
-                                    <div className="p-3 rounded-4" style={{ background: '#faf5ff', color: '#a855f7' }}>
-                                        <span className="material-symbols-outlined d-block fs-4">inventory</span>
+                                <div className="d-flex justify-content-between align-items-start mb-4">
+                                    <div className="rounded-circle p-3 d-flex align-items-center justify-content-center" style={{ background: '#faf5ff', color: '#a855f7' }}>
+                                        <span className="material-symbols-outlined">inventory</span>
                                     </div>
-                                    <span className="badge-pill-custom" style={{ background: '#f0fdf4', color: '#10b981' }}>+3.1%</span>
+                                    <span className="admin-badge admin-badge-success">Catalog</span>
                                 </div>
-                                <h3 className="stat-value">3,420</h3>
-                                <p className="stat-label mb-0">Total Products</p>
+                                <div className="stat-label uppercase small fw-bold text-muted">Total Products</div>
+                                <div className="stat-value">{stats.totalProducts}</div>
                             </div>
                         </div>
-                        <div className="col">
-                            <div className="stat-card" style={{ borderLeft: '4px solid #fb923c' }}>
-                                <div className="d-flex justify-content-between align-items-start">
-                                    <div className="p-3 rounded-4" style={{ background: '#fff7ed', color: '#fb923c' }}>
-                                        <span className="material-symbols-outlined d-block fs-4">pending_actions</span>
+                        <div className="col animate-fade" style={{ animationDelay: '0.5s' }}>
+                            <div className="stat-card">
+                                <div className="d-flex justify-content-between align-items-start mb-4">
+                                    <div className="rounded-circle p-3 d-flex align-items-center justify-content-center" style={{ background: '#fff7ed', color: '#fb923c' }}>
+                                        <span className="material-symbols-outlined">pending_actions</span>
                                     </div>
-                                    <span className="badge-pill-custom" style={{ background: '#fff7ed', color: '#fb923c' }}>8 New</span>
+                                    <span className="admin-badge admin-badge-danger">Urgent</span>
                                 </div>
-                                <h3 className="stat-value" style={{ color: '#fb923c' }}>42</h3>
-                                <p className="stat-label mb-0" style={{ color: '#fb923c' }}>Pending Orders</p>
+                                <div className="stat-label uppercase small fw-bold text-muted">Pending Orders</div>
+                                <div className="stat-value">{stats.pendingOrders}</div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Charts Grid */}
                     <div className="row g-4 mb-5">
-                        <div className="col-lg-8">
-                            <div className="trend-card">
+                        <div className="col-lg-8 animate-fade" style={{ animationDelay: '0.6s' }}>
+                            <div className="stat-card h-100 border-0 shadow-sm" style={{ padding: '2.5rem' }}>
                                 <div className="d-flex justify-content-between align-items-center mb-5">
                                     <div>
-                                        <h4 className="fw-bold text-dark mb-1" style={{ fontSize: '1.25rem' }}>Sales Trends</h4>
-                                        <p className="text-muted small fw-semibold mb-0">Revenue growth over the last 7 days</p>
+                                        <h4 className="fw-semibold text-dark mb-1" style={{ fontSize: '1.5rem' }}>Sales Trends</h4>
+                                        <p className="text-muted small fw-bold">
+                                            Revenue growth over the {
+                                                salesPattern === '7days' ? 'last 7 days' :
+                                                salesPattern === '30days' ? 'last 30 days' :
+                                                salesPattern === 'month' ? 'current month' :
+                                                salesPattern === 'year' ? 'current year' :
+                                                salesPattern === 'custom' ? `period ${customStartDate} to ${customEndDate}` : 'selected period'
+                                            }
+                                        </p>
                                     </div>
-                                    <div className="d-flex gap-2">
-                                        <button className="btn btn-success btn-sm px-4 fw-bold rounded-3" style={{ background: 'var(--admin-primary)', border: 'none', fontSize: 13, height: 36 }}>Weekly</button>
-                                        <button className="btn btn-light btn-sm px-4 fw-bold rounded-3 border-0" style={{ fontSize: 13, height: 36, color: '#64748b' }}>Monthly</button>
+                                    <div className="d-flex gap-3 align-items-center">
+                                        {salesPattern === 'custom' && (
+                                            <div className="d-flex gap-2 animate-fade">
+                                                <input 
+                                                    type="date" 
+                                                    className="form-control form-control-sm border-0 shadow-sm rounded-4 px-3"
+                                                    style={{ height: '42px', width: '140px', fontSize: '12px' }}
+                                                    value={customStartDate}
+                                                    onChange={(e) => setCustomStartDate(e.target.value)}
+                                                />
+                                                <input 
+                                                    type="date" 
+                                                    className="form-control form-control-sm border-0 shadow-sm rounded-4 px-3"
+                                                    style={{ height: '42px', width: '140px', fontSize: '12px' }}
+                                                    value={customEndDate}
+                                                    onChange={(e) => setCustomEndDate(e.target.value)}
+                                                />
+                                            </div>
+                                        )}
+                                        <div className="position-relative">
+                                            <select 
+                                                className="form-select form-select-sm border-0 shadow-sm rounded-4 px-3 fw-bold"
+                                                style={{ height: '42px', width: '160px', fontSize: '12px', backgroundColor: '#ecfdf5', color: '#10b981', cursor: 'pointer', appearance: 'none', WebkitAppearance: 'none', backgroundImage: 'none' }}
+                                                value={salesPattern}
+                                                onChange={(e) => setSalesPattern(e.target.value)}
+                                            >
+                                                <option value="7days">Last 7 Days</option>
+                                                <option value="30days">Last 30 Days</option>
+                                                <option value="month">Current Month</option>
+                                                <option value="year">Current Year</option>
+                                                <option value="custom">Custom Range</option>
+                                            </select>
+                                            <span className="material-symbols-outlined position-absolute" style={{ right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#10b981', pointerEvents: 'none', fontSize: '20px' }}>expand_more</span>
+                                        </div>
                                     </div>
                                 </div>
-                                <div className="position-relative mt-2" style={{ height: 260 }}>
-                                    <svg className="w-100 h-100" preserveAspectRatio="none" viewBox="0 0 500 200">
-                                        <defs>
-                                            <linearGradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
-                                                <stop offset="0%" stopColor="#10b981" stopOpacity="0.1" />
-                                                <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
-                                            </linearGradient>
-                                        </defs>
-                                        <path d="M0,180 C50,160 80,190 120,130 C160,70 200,100 250,60 C300,20 350,80 400,40 C450,0 480,30 500,20 L500,200 L0,200 Z" fill="url(#chartGradient)" />
-                                        <path d="M0,180 C50,160 80,190 120,130 C160,70 200,100 250,60 C300,20 350,80 400,40 C450,0 480,30 500,20" fill="none" stroke="#10b981" strokeLinecap="round" strokeWidth="4" />
-                                    </svg>
-                                    <div className="d-flex justify-content-between border-top pt-4 mt-2 px-2">
-                                        {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(day => (
-                                            <span key={day} className="text-muted fw-bold" style={{ fontSize: 11, letterSpacing: '0.05em' }}>{day}</span>
-                                        ))}
-                                    </div>
+                                <div className="position-relative flex-grow-1" style={{ minHeight: 300 }}>
+                                    <Line 
+                                        data={chartData}
+                                        options={{
+                                            responsive: true,
+                                            maintainAspectRatio: false,
+                                            plugins: {
+                                                legend: { display: false },
+                                                tooltip: {
+                                                    backgroundColor: '#1f2937',
+                                                    padding: 12,
+                                                    displayColors: false,
+                                                    callbacks: {
+                                                        label: (context) => `Revenue: Rs. ${context.parsed.y.toLocaleString()}`
+                                                    }
+                                                }
+                                            },
+                                            scales: {
+                                                y: {
+                                                    grid: { color: 'rgba(0,0,0,0.03)', drawBorder: false },
+                                                    ticks: {
+                                                        font: { weight: 'bold', size: 10 },
+                                                        callback: (value) => value >= 1000 ? (value / 1000) + 'k' : value
+                                                    }
+                                                },
+                                                x: {
+                                                    grid: { display: false },
+                                                    ticks: {
+                                                        font: { weight: 'bold', size: 10 },
+                                                        maxRotation: 0,
+                                                        autoSkip: true,
+                                                        maxTicksLimit: salesPattern === '30days' ? 10 : 7
+                                                    }
+                                                }
+                                            }
+                                        }}
+                                    />
                                 </div>
                             </div>
                         </div>
-                        <div className="col-lg-4">
-                            <div className="health-card d-flex flex-column">
-                                <h4 className="fw-bold text-dark mb-4" style={{ fontSize: '1.25rem' }}>Inventory Health</h4>
+                        <div className="col-lg-4 animate-fade" style={{ animationDelay: '0.7s' }}>
+                            <div className="stat-card h-100 border-0 shadow-sm d-flex flex-column" style={{ padding: '2.5rem' }}>
+                                <h4 className="fw-semibold text-dark mb-5" style={{ fontSize: '1.5rem' }}>Inventory Health</h4>
                                 <div className="flex-grow-1 d-flex flex-column justify-content-center gap-5">
-                                    <div>
-                                        <div className="d-flex justify-content-between mb-3 small fw-bold">
-                                            <span className="text-dark">In Stock</span>
-                                            <span className="text-success" style={{ color: 'var(--admin-primary)' }}>85%</span>
+                                    {[
+                                        { label: 'In Stock', value: inventoryHealth.inStock, color: '#10b981' },
+                                        { label: 'Low Stock', value: inventoryHealth.lowStock, color: '#f59e0b' },
+                                        { label: 'Out of Stock', value: inventoryHealth.outOfStock, color: '#ef4444' }
+                                    ].map((item, idx) => (
+                                        <div key={idx}>
+                                            <div className="d-flex justify-content-between mb-3">
+                                                <span className="fw-semibold text-dark small text-uppercase">{item.label}</span>
+                                                <span className="fw-semibold" style={{ color: item.color }}>{item.value}%</span>
+                                            </div>
+                                            <div className="progress" style={{ height: 10, borderRadius: 20, background: '#f1f5f9' }}>
+                                                <div className="progress-bar transition-all" style={{ width: `${item.value}%`, background: item.color, borderRadius: 20 }}></div>
+                                            </div>
                                         </div>
-                                        <div className="progress" style={{ height: 10, borderRadius: 10, background: '#f1f5f9' }}>
-                                            <div className="progress-bar" style={{ width: '85%', background: 'var(--admin-primary)', borderRadius: 10 }}></div>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div className="d-flex justify-content-between mb-3 small fw-bold">
-                                            <span className="text-dark">Low Stock</span>
-                                            <span style={{ color: '#fb923c' }}>12%</span>
-                                        </div>
-                                        <div className="progress" style={{ height: 10, borderRadius: 10, background: '#f1f5f9' }}>
-                                            <div className="progress-bar" style={{ width: '12%', background: '#fb923c', borderRadius: 10 }}></div>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div className="d-flex justify-content-between mb-3 small fw-bold">
-                                            <span className="text-dark">Out of Stock</span>
-                                            <span className="text-danger">3%</span>
-                                        </div>
-                                        <div className="progress" style={{ height: 10, borderRadius: 10, background: '#f1f5f9' }}>
-                                            <div className="progress-bar bg-danger" style={{ width: '3%', borderRadius: 10 }}></div>
-                                        </div>
-                                    </div>
+                                    ))}
                                 </div>
-                                <button className="btn btn-outline-success w-100 py-3 rounded-3 mt-5 fw-bold border-2" style={{ borderColor: 'var(--admin-primary)', color: 'var(--admin-primary)' }}>
-                                    Review Catalogues
-                                </button>
+                                <Link to="/admin/products" className="btn w-100 py-3 rounded-4 mt-5 fw-semibold border-2 transition-all d-flex align-items-center justify-content-center gap-2" style={{ borderColor: 'rgba(16, 185, 129, 0.2)', color: '#10b981', background: '#f0fdf4' }}>
+                                    Review Products
+                                    <span className="material-symbols-outlined fs-5">arrow_forward</span>
+                                </Link>
                             </div>
                         </div>
                     </div>
 
-                    {/* Orders Table */}
-                    <div className="bg-white rounded-5 shadow-sm overflow-hidden" style={{ border: '1px solid #f1f5f9' }}>
-                        <div className="px-5 py-5 d-flex align-items-center justify-content-between">
-                            <h4 className="fw-bold text-dark mb-0" style={{ fontSize: '1.25rem' }}>Recent Orders</h4>
-                            <button className="btn text-success fw-bold p-0 fs-6 hover-underline" style={{ color: 'var(--admin-primary)' }}>View All</button>
+                    <div className="bg-white rounded-5 shadow-sm overflow-hidden border-0">
+                        <div className="px-5 py-5 d-flex align-items-center justify-content-between bg-light bg-opacity-50">
+                            <div>
+                                <h4 className="fw-semibold text-dark mb-1" style={{ fontSize: '1.25rem' }}>Recent Orders</h4>
+                                <p className="text-muted small fw-bold mb-0">Latest transaction activities</p>
+                            </div>
+                            <Link to="/admin/orders" className="btn btn-white border shadow-sm px-4 py-2 rounded-4 fw-semibold d-flex align-items-center gap-2" style={{ fontSize: '14px', color: '#64748b' }}>
+                                View All
+                                <span className="material-symbols-outlined fs-5">open_in_new</span>
+                            </Link>
                         </div>
                         <div className="table-responsive">
                             <table className="table align-middle admin-table mb-0">
                                 <thead>
                                     <tr>
-                                        <th className="ps-5">ORDER ID</th>
-                                        <th>PRODUCT</th>
+                                        <th className="ps-5">ORDER REF</th>
+                                        <th>DATE</th>
                                         <th>CUSTOMER</th>
                                         <th>STATUS</th>
-                                        <th className="text-end pe-5">AMOUNT</th>
+                                        <th className="text-end pe-5">TOTAL AMOUNT</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {[
-                                        { id: '#ORD-4921', product: 'Wireless Earbuds Pro', customer: 'Alex Thompson', status: 'Delivered', amount: '$129.99', bg: '#dcfce7', color: '#15803d' },
-                                        { id: '#ORD-4922', product: 'Smart Watch Series 7', customer: 'Sarah Jenkins', status: 'Processing', amount: '$399.00', bg: '#dbeafe', color: '#1d4ed8' },
-                                        { id: '#ORD-4923', product: 'Leather Laptop Sleeve', customer: 'Michael Ross', status: 'Pending', amount: '$45.50', bg: '#ffedd5', color: '#c2410c' }
-                                    ].map((order, idx) => (
-                                        <tr key={idx}>
-                                            <td className="ps-5 fw-bold text-dark">{order.id}</td>
-                                            <td>{order.product}</td>
-                                            <td className="fw-semibold text-secondary">{order.customer}</td>
-                                            <td>
-                                                <span className="badge-pill-custom" style={{ background: order.bg, color: order.color }}>{order.status}</span>
-                                            </td>
-                                            <td className="text-end pe-5 fw-bold text-dark">{order.amount}</td>
-                                        </tr>
-                                    ))}
+                                    {recentOrders.length > 0 ? recentOrders.map((order) => {
+                                        const style = getStatusStyle(order.order_status);
+                                        return (
+                                            <tr key={order.order_id}>
+                                                <td className="ps-5 fw-semibold text-success">#ORD-{order.order_number || order.order_id}</td>
+                                                <td className="text-muted fw-bold small">{new Date(order.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                                                <td>
+                                                    <div className="fw-semibold text-dark">{order.customer_name || 'Anonymous'}</div>
+                                                    <div className="text-muted small fw-bold" style={{ fontSize: '11px' }}>{order.email}</div>
+                                                </td>
+                                                <td>
+                                                    <span className="badge px-3 py-2 rounded-pill fw-semibold" style={{ background: style.bg, color: style.color, fontSize: '11px' }}>{order.order_status}</span>
+                                                </td>
+                                                <td className="text-end pe-5 fw-semibold text-dark">Rs. {Number(order.total_amount).toLocaleString()}</td>
+                                            </tr>
+                                        );
+                                    }) : (
+                                        <tr><td colSpan="5" className="text-center py-5 text-muted fw-bold">No recent activities found.</td></tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>

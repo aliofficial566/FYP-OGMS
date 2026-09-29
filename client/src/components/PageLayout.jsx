@@ -17,9 +17,8 @@ const PageLayout = ({ children }) => {
                 {children}
             </main>
 
-            {/* Display Footer on every page except maybe some specific ones if needed */}
-            {/* But for now, following "every page" instruction */}
-            <Footer />
+            {/* Display Footer on every page except admin routes */}
+            {!isAdminRoute && <Footer />}
 
             <style>{`
                 .page-wrapper {

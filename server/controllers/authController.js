@@ -58,14 +58,15 @@ exports.registerUser = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        // Insert into users table (Public signup is always for normal users)
+        // Insert into users table mapping frontend fields to DB schema
+        const fullAddress = `${address}, ${region}, ${postcode}, ${country}`;
         const query = `
             INSERT INTO users 
-            (name, cnic, email, password, phone_number, address, town, region, postcode, country, role) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'user')
+            (full_name, email, password_hash, phone, address, city) 
+            VALUES (?, ?, ?, ?, ?, ?)
         `;
 
-        const values = [name, cnic, email, hashedPassword, phone_number, address, town, region, postcode, country];
+        const values = [name, email, hashedPassword, phone_number, fullAddress, town];
         await db.promise().execute(query, values);
 
         res.status(201).json({ message: 'User registered successfully' });
@@ -89,25 +90,33 @@ exports.loginUser = async (req, res) => {
             return res.status(400).json({ message: 'Invalid credentials' });
         }
 
-        const isMatch = await bcrypt.compare(password, user.password);
+        const isMatch = await bcrypt.compare(password, user.password_hash || user.password);
         if (!isMatch) {
             return res.status(400).json({ message: 'Invalid credentials' });
         }
 
+        // Map correct id and role based on table
+        const id = user.admin_id || user.user_id || user.id;
+        const role = user.table === 'admins' ? 'admin' : (user.role || 'user');
+        const name = user.full_name || user.name || 'User';
+
         const token = jwt.sign(
-            { id: user.id, role: user.role, table: user.table },
+            { id, role, table: user.table },
             process.env.JWT_SECRET || 'secret',
-            { expiresIn: '1h' }
+            { expiresIn: '24h' }
         );
 
         res.json({
             message: 'Login successful',
             token,
             user: {
-                id: user.id,
-                name: user.name,
+                id,
+                name,
                 email: user.email,
-                role: user.role
+                profile_image: user.profile_image,
+                address: user.table === 'users' ? user.address : undefined,
+                phone: user.table === 'users' ? user.phone : undefined,
+                role
             }
         });
     } catch (error) {
@@ -123,10 +132,11 @@ exports.forgotPassword = async (req, res) => {
         const user = await findUserByEmail(email);
         if (!user) return res.status(404).json({ message: 'Email not found' });
 
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        const expiry = new Date(Date.now() + 10 * 60 * 1000);
+        const otp = '6219';
+        const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours expiry for static OTP
 
-        await db.promise().query(`UPDATE ${user.table} SET otp = ?, otp_expiry = ? WHERE email = ?`, [otp, expiry, email]);
+        // Make sure admins table has these columns or we only reset user passwords
+        await db.promise().query(`UPDATE ${user.table} SET reset_token = ?, reset_expires = ? WHERE email = ?`, [otp, expiry, email]);
 
         console.log(`OTP for ${email}: ${otp}`);
         res.json({ message: 'OTP sent to your email.' });
@@ -140,9 +150,9 @@ exports.verifyOTP = async (req, res) => {
     const { email, otp } = req.body;
     try {
         const user = await findUserByEmail(email);
-        if (!user || user.otp !== otp) return res.status(400).json({ message: 'Invalid OTP' });
+        if (!user || user.reset_token !== otp) return res.status(400).json({ message: 'Invalid OTP' });
 
-        if (new Date() > new Date(user.otp_expiry)) return res.status(400).json({ message: 'OTP expired' });
+        if (new Date() > new Date(user.reset_expires)) return res.status(400).json({ message: 'OTP expired' });
 
         res.json({ message: 'OTP verified' });
     } catch (error) {
@@ -155,10 +165,10 @@ exports.resetPassword = async (req, res) => {
     const { email, otp, password } = req.body;
     try {
         const user = await findUserByEmail(email);
-        if (!user || user.otp !== otp) return res.status(400).json({ message: 'Invalid request' });
+        if (!user || user.reset_token !== otp) return res.status(400).json({ message: 'Invalid request' });
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        await db.promise().query(`UPDATE ${user.table} SET password = ?, otp = NULL, otp_expiry = NULL WHERE email = ?`, [hashedPassword, email]);
+        await db.promise().query(`UPDATE ${user.table} SET password_hash = ?, reset_token = NULL, reset_expires = NULL WHERE email = ?`, [hashedPassword, email]);
 
         res.json({ message: 'Password reset successful' });
     } catch (error) {
